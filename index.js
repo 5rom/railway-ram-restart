@@ -1,6 +1,6 @@
 const { gql, GraphQLClient } = require('graphql-request')
 const { Cron } = require("croner");
-require('dotenv').config(); 
+require('dotenv').config();
 
 
 const ENDPOINT = 'https://backboard.railway.app/graphql/v2';
@@ -54,7 +54,7 @@ async function getEnvironments() {
                 }
             }
         }`
-    
+
     const variables = {
         "projectId": process.env.RAILWAY_PROJECT_ID,
     }
@@ -88,8 +88,8 @@ async function getMetrics(projectId, serviceId, environmentId) {
     // Get current DateTime
     const date = new Date();
     try {
-        let query = 
-        `query metrics($startDate: DateTime!, $projectId: String!, $serviceId: String! = "", $environmentId: String = "") {
+        let query =
+            `query metrics($startDate: DateTime!, $projectId: String!, $serviceId: String! = "", $environmentId: String = "") {
             metrics(
               projectId: $projectId
               measurements: MEMORY_USAGE_GB
@@ -153,25 +153,24 @@ async function checkRamRestart() {
         for (const serviceInstance of targetEnvironment) {
             for (const deployment of serviceInstance.node.serviceInstances.edges) {
                 const serviceId = deployment.node.serviceId;
-                const { service } = await getService(serviceId);  
-                // Check the service name to see if it matches the service we are looking for
-                if (service.name === process.env.TARGET_SERVICE_NAME) {
+                const { service } = await getService(serviceId);
+                // Check the service name to see if it matches any of the services we are looking for
+                const targetServices = process.env.TARGET_SERVICE_NAME.split(',').map(name => name.trim());
+                if (targetServices.includes(service.name)) {
                     // Get the metrics for the service
                     const { metrics } = await getMetrics(process.env.RAILWAY_PROJECT_ID, serviceId, process.env.RAILWAY_ENVIRONMENT_ID);
                     // Compare the metrics to the threshold process.en.MAX_RAM_GB
                     // If the metrics are greater than the threshold, restart the service
                     const latestMetric = metrics[0].values[0].value;
-                    console.log("Current Ram Usage:", latestMetric)
+                    console.log("Current Ram Usage for service", service.name, ":", latestMetric)
                     console.log("Max Ram Usage:", Number(process.env.MAX_RAM_GB))
                     if (latestMetric >= Number(process.env.MAX_RAM_GB)) {
                         const deploymentId = service.deployments.edges.filter((edge) => edge.node.environmentId === process.env.RAILWAY_ENVIRONMENT_ID)[0].node.id;
                         await deploymentInstanceRestart(deploymentId);
-                        console.log("Service Restarted")
+                        console.log("Service", service.name, "Restarted")
                     }
                 }
             }
-            
-  
         }
     } catch (error) {
         console.error('Error in API calls:', error);
@@ -191,15 +190,16 @@ async function forceRestart() {
         for (const serviceInstance of targetEnvironment) {
             for (const deployment of serviceInstance.node.serviceInstances.edges) {
                 const serviceId = deployment.node.serviceId;
-                const { service } = await getService(serviceId);  
-                // Check the service name to see if it matches the service we are looking for
-                if (service.name === process.env.TARGET_SERVICE_NAME) {
+                const { service } = await getService(serviceId);
+                // Check the service name to see if it matches any of the services we are looking for
+                const targetServices = process.env.TARGET_SERVICE_NAME.split(',').map(name => name.trim());
+                if (targetServices.includes(service.name)) {
                     // Restart the service
                     const deploymentId = service.deployments.edges.filter((edge) => edge.node.environmentId === process.env.RAILWAY_ENVIRONMENT_ID)[0].node.id;
-                    await deploymentInstanceRestart(deploymentId);   
-                    console.log("Service Restarted")
+                    await deploymentInstanceRestart(deploymentId);
+                    console.log("Service", service.name, "Restarted")
                 }
-            } 
+            }
         }
     } catch (error) {
         console.error('Error in API calls:', error);
@@ -212,12 +212,12 @@ if (process.env.MAX_RAM_CRON_INTERVAL_CHECK) {
     Cron(process.env.MAX_RAM_CRON_INTERVAL_CHECK, async () => {
         console.log('Checking Ram Usage...');
         checkRamRestart();
-      });;
+    });;
 }
 if (process.env.CRON_INTERVAL_RESTART) {
     Cron(process.env.CRON_INTERVAL_RESTART, async () => {
         console.log('Restarting Service...');
         forceRestart();
-      });;
+    });;
 }
 
