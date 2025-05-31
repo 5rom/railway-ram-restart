@@ -2,6 +2,14 @@ const { gql, GraphQLClient } = require('graphql-request')
 const { Cron } = require("croner");
 require('dotenv').config();
 
+// Suppress punycode deprecation warning
+process.removeAllListeners('warning');
+process.on('warning', (warning) => {
+    if (warning.name === 'DeprecationWarning' && warning.message.includes('punycode')) {
+        return;
+    }
+    console.warn(warning);
+});
 
 const ENDPOINT = 'https://backboard.railway.app/graphql/v2';
 
@@ -145,20 +153,51 @@ async function getService(serviceId) {
 
 async function checkRamRestart() {
     try {
+        console.log('Starting RAM check...');
         // Get Environments to check if the environment already exists
         let response = await getEnvironments();
+
+        if (!response || !response.environments) {
+            console.log('No environments found');
+            return;
+        }
+
         // Filter the response to only include the environment name we are looking to create
         const targetEnvironment = response.environments.edges.filter((edge) => edge.node.name === process.env.RAILWAY_ENVIRONMENT_NAME);
+        console.log('Target environment found:', targetEnvironment.length > 0);
+
+        if (targetEnvironment.length === 0) {
+            console.log('Environment not found:', process.env.RAILWAY_ENVIRONMENT_NAME);
+            return;
+        }
+
         // Get all the services in the target environment
         for (const serviceInstance of targetEnvironment) {
             for (const deployment of serviceInstance.node.serviceInstances.edges) {
                 const serviceId = deployment.node.serviceId;
                 const { service } = await getService(serviceId);
+
+                if (!service) {
+                    console.log('Service not found for ID:', serviceId);
+                    continue;
+                }
+
+                console.log('Checking service:', service.name);
+
                 // Check the service name to see if it matches any of the services we are looking for
                 const targetServices = process.env.TARGET_SERVICE_NAME.split(',').map(name => name.trim());
+                console.log('Target services:', targetServices);
+
                 if (targetServices.includes(service.name)) {
+                    console.log('Found target service:', service.name);
                     // Get the metrics for the service
                     const { metrics } = await getMetrics(process.env.RAILWAY_PROJECT_ID, serviceId, process.env.RAILWAY_ENVIRONMENT_ID);
+
+                    if (!metrics || !metrics[0] || !metrics[0].values || metrics[0].values.length === 0) {
+                        console.log('No metrics data available for service:', service.name);
+                        continue;
+                    }
+
                     // Compare the metrics to the threshold process.en.MAX_RAM_GB
                     // If the metrics are greater than the threshold, restart the service
                     const latestMetric = metrics[0].values[0].value;
@@ -168,6 +207,8 @@ async function checkRamRestart() {
                         const deploymentId = service.deployments.edges.filter((edge) => edge.node.environmentId === process.env.RAILWAY_ENVIRONMENT_ID)[0].node.id;
                         await deploymentInstanceRestart(deploymentId);
                         console.log("Service", service.name, "Restarted")
+                    } else {
+                        console.log("Service", service.name, "is within RAM limits")
                     }
                 }
             }
@@ -181,19 +222,43 @@ async function checkRamRestart() {
 
 async function forceRestart() {
     try {
+        console.log('Starting force restart...');
         // Get Environments to check if the environment already exists
         let response = await getEnvironments();
 
+        if (!response || !response.environments) {
+            console.log('No environments found');
+            return;
+        }
+
         // Filter the response to only include the environment name we are looking to create
         const targetEnvironment = response.environments.edges.filter((edge) => edge.node.name === process.env.RAILWAY_ENVIRONMENT_NAME);
+        console.log('Target environment found:', targetEnvironment.length > 0);
+
+        if (targetEnvironment.length === 0) {
+            console.log('Environment not found:', process.env.RAILWAY_ENVIRONMENT_NAME);
+            return;
+        }
+
         // Get all the services in the target environment
         for (const serviceInstance of targetEnvironment) {
             for (const deployment of serviceInstance.node.serviceInstances.edges) {
                 const serviceId = deployment.node.serviceId;
                 const { service } = await getService(serviceId);
+
+                if (!service) {
+                    console.log('Service not found for ID:', serviceId);
+                    continue;
+                }
+
+                console.log('Checking service:', service.name);
+
                 // Check the service name to see if it matches any of the services we are looking for
                 const targetServices = process.env.TARGET_SERVICE_NAME.split(',').map(name => name.trim());
+                console.log('Target services:', targetServices);
+
                 if (targetServices.includes(service.name)) {
+                    console.log('Found target service for restart:', service.name);
                     // Restart the service
                     const deploymentId = service.deployments.edges.filter((edge) => edge.node.environmentId === process.env.RAILWAY_ENVIRONMENT_ID)[0].node.id;
                     await deploymentInstanceRestart(deploymentId);
@@ -207,6 +272,35 @@ async function forceRestart() {
         console.log('API calls failed');
     }
 }
+
+async function testConfiguration() {
+    console.log('=== Configuration Test ===');
+    console.log('RAILWAY_API_TOKEN:', process.env.RAILWAY_API_TOKEN ? 'Set' : 'Not set');
+    console.log('RAILWAY_PROJECT_ID:', process.env.RAILWAY_PROJECT_ID || 'Not set');
+    console.log('RAILWAY_ENVIRONMENT_NAME:', process.env.RAILWAY_ENVIRONMENT_NAME || 'Not set');
+    console.log('RAILWAY_ENVIRONMENT_ID:', process.env.RAILWAY_ENVIRONMENT_ID || 'Not set');
+    console.log('TARGET_SERVICE_NAME:', process.env.TARGET_SERVICE_NAME || 'Not set');
+    console.log('MAX_RAM_GB:', process.env.MAX_RAM_GB || 'Not set');
+    console.log('MAX_RAM_CRON_INTERVAL_CHECK:', process.env.MAX_RAM_CRON_INTERVAL_CHECK || 'Not set');
+    console.log('CRON_INTERVAL_RESTART:', process.env.CRON_INTERVAL_RESTART || 'Not set');
+
+    try {
+        console.log('\n=== Testing Railway API Connection ===');
+        const response = await getEnvironments();
+        if (response && response.environments) {
+            console.log('✓ Railway API connection successful');
+            console.log('Available environments:', response.environments.edges.map(e => e.node.name));
+        } else {
+            console.log('✗ Railway API connection failed or no data returned');
+        }
+    } catch (error) {
+        console.log('✗ Railway API connection failed:', error.message);
+    }
+    console.log('=== Configuration Test Complete ===\n');
+}
+
+// Run configuration test on startup
+testConfiguration();
 
 if (process.env.MAX_RAM_CRON_INTERVAL_CHECK) {
     Cron(process.env.MAX_RAM_CRON_INTERVAL_CHECK, async () => {
