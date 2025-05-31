@@ -303,15 +303,47 @@ async function testConfiguration() {
 testConfiguration();
 
 if (process.env.MAX_RAM_CRON_INTERVAL_CHECK) {
-    Cron(process.env.MAX_RAM_CRON_INTERVAL_CHECK, async () => {
-        console.log('Checking Ram Usage...');
-        checkRamRestart();
-    });;
+    console.log('Setting up RAM check cron with interval:', process.env.MAX_RAM_CRON_INTERVAL_CHECK);
+    const ramCheckCron = Cron(process.env.MAX_RAM_CRON_INTERVAL_CHECK, async () => {
+        console.log('=== Cron Job Started: Checking Ram Usage ===');
+        console.log('Current time:', new Date().toISOString());
+        await checkRamRestart();
+        console.log('=== Cron Job Completed ===\n');
+    });
+
+    // Display next run time
+    const nextRun = ramCheckCron.nextRun();
+    if (nextRun) {
+        console.log('Next RAM check scheduled for:', nextRun.toISOString());
+        console.log('Next RAM check in:', Math.round((nextRun.getTime() - Date.now()) / 1000), 'seconds');
+    }
+} else {
+    console.log('MAX_RAM_CRON_INTERVAL_CHECK not set - RAM monitoring disabled');
 }
+
 if (process.env.CRON_INTERVAL_RESTART) {
-    Cron(process.env.CRON_INTERVAL_RESTART, async () => {
-        console.log('Restarting Service...');
-        forceRestart();
-    });;
+    console.log('Setting up force restart cron with interval:', process.env.CRON_INTERVAL_RESTART);
+    const restartCron = Cron(process.env.CRON_INTERVAL_RESTART, async () => {
+        console.log('=== Cron Job Started: Force Restarting Service ===');
+        console.log('Current time:', new Date().toISOString());
+        await forceRestart();
+        console.log('=== Cron Job Completed ===\n');
+    });
+
+    // Display next run time
+    const nextRun = restartCron.nextRun();
+    if (nextRun) {
+        console.log('Next force restart scheduled for:', nextRun.toISOString());
+        console.log('Next force restart in:', Math.round((nextRun.getTime() - Date.now()) / 1000), 'seconds');
+    }
+} else {
+    console.log('CRON_INTERVAL_RESTART not set - Force restart disabled');
 }
+
+// Display current time and timezone info
+console.log('\n=== Current System Time Info ===');
+console.log('Current system time:', new Date().toISOString());
+console.log('Current local time:', new Date().toString());
+console.log('Timezone offset:', new Date().getTimezoneOffset(), 'minutes');
+console.log('=== System Ready ===\n');
 
