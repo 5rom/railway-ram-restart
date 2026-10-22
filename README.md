@@ -21,9 +21,85 @@
 | MAX_RAM_CRON_INTERVAL_CHECK |    []    |         | The cron interval. Example "_/1 _ \* \* \*"                                                                                                                        |
 | CRON_INTERVAL_RESTART       |    []    |         | The cron interval to restart regardless of the ram usage                                                                                                           |
 
+## Cron Expression Reference
+
+Common cron expressions for monitoring intervals:
+
+| Interval         | Cron Expression | Description                         |
+| ---------------- | --------------- | ----------------------------------- |
+| Every minute     | `* * * * *`     | Check every minute                  |
+| Every 5 minutes  | `*/5 * * * *`   | Check every 5 minutes               |
+| Every 15 minutes | `*/15 * * * *`  | Check every 15 minutes              |
+| Every 30 minutes | `*/30 * * * *`  | Check every 30 minutes              |
+| **Every hour**   | `0 * * * *`     | **Check at minute 0 of every hour** |
+| Every 2 hours    | `0 */2 * * *`   | Check every 2 hours                 |
+| Every 6 hours    | `0 */6 * * *`   | Check every 6 hours                 |
+| Daily at 2 AM    | `0 2 * * *`     | Check once per day at 2:00 AM       |
+| Twice daily      | `0 6,18 * * *`  | Check at 6:00 AM and 6:00 PM        |
+
+### Example Configuration for Hourly Check:
+
+```env
+MAX_RAM_CRON_INTERVAL_CHECK=0 * * * *
+MAX_RAM_GB=2
+```
+
 ## How To Use
 
 ```
    yarn install
    yarn start
 ```
+
+## Viewing Logs on Railway
+
+### Method 1: Railway Dashboard
+
+1. Go to [railway.app](https://railway.app) and login
+2. Select your project
+3. Click on your service
+4. Go to **Deployments** tab
+5. Click on the current deployment
+6. Click **"View Logs"** to see runtime logs
+
+### Method 2: Railway CLI
+
+Install Railway CLI and view logs in terminal:
+
+```bash
+# Install Railway CLI
+npm install -g @railway/cli
+
+# Login to Railway
+railway login
+
+# Link to your project (run this in your project directory)
+railway link
+
+# View logs in real-time
+railway logs
+
+# View logs for specific service
+railway logs --service <service-name>
+
+# View logs with follow mode (real-time)
+railway logs --follow
+```
+
+### Method 3: Log Filtering
+
+You can filter logs by searching for specific keywords in the Railway dashboard:
+
+- Search for `"=== Cron Job Started"` to see when cron jobs run
+- Search for `"Restarted"` to see restart events
+- Search for `"Current Ram Usage"` to see RAM monitoring
+- Search for `"Error"` to see any errors
+
+## Troubleshooting
+
+If you don't see any logs:
+
+1. Make sure your service is running
+2. Check if there are any build errors in Build Logs
+3. Verify your environment variables are set correctly
+4. Look for the configuration test output when the service starts
